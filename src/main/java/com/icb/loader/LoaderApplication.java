@@ -1,6 +1,14 @@
 package com.icb.loader;
 
+import com.icb.loader.domain.db.W5Card;
+import com.icb.loader.domain.db.W5Conversion;
+import com.icb.loader.domain.db.W5ConversionCol;
 import com.icb.loader.domain.db.W5Form;
+import com.icb.loader.domain.db.W5FormCell;
+import com.icb.loader.domain.db.W5FormHint;
+import com.icb.loader.domain.db.W5FormModule;
+import com.icb.loader.domain.db.W5GlobalFunc;
+import com.icb.loader.domain.db.W5GlobalFuncParam;
 import com.icb.loader.domain.db.W5Grid;
 import com.icb.loader.domain.db.W5GridColumn;
 import com.icb.loader.domain.db.W5GridModule;
@@ -34,12 +42,13 @@ import java.util.Map;
 
 @SpringBootApplication
 public class LoaderApplication {
-	public static String projectId="1bf77646-3045-4e87-9251-df035a969458";
+	public static String projectId="067e6162-3b6f-4ae2-a221-2470b63dff00";
+	public static String host="localhost";//"35.226.30.186";
 
 	@Bean
 	public RedissonClient redisson() {
 		Config config = new Config();
-		config.useSingleServer().setAddress(String.format("redis://%s:%s", "35.226.30.186", 6379)).setTimeout(100000).setConnectionMinimumIdleSize(10).setConnectionPoolSize(10);
+		config.useSingleServer().setAddress(String.format("redis://%s:%s", host, 6379)).setTimeout(100000).setConnectionMinimumIdleSize(10).setConnectionPoolSize(10);
 		RedissonClient rc = Redisson.create(config);
 		return rc;
 	}
@@ -110,7 +119,7 @@ public class LoaderApplication {
 			}
 			
 		}
-		RMap<Integer, W5Table>  rtableMap= redissonClient.getMap(String.format("icb-project:%s:table", projectId));
+		RMap<Integer, W5Table>  rtableMap= redissonClient.getMap(String.format("icb-cache:%s:table", projectId));
 		
 		for (W5Table tx : tables) {
 			rtableMap.put(tx.getTableId(), tx);
@@ -151,7 +160,7 @@ public class LoaderApplication {
 			}
 		}
 		
-		RMap<Integer, W5Query>  rqueryMap= redissonClient.getMap(String.format("icb-project:%s:query", projectId));
+		RMap<Integer, W5Query>  rqueryMap= redissonClient.getMap(String.format("icb-cache:%s:query", projectId));
 		
 		for (W5Query qx : queries) {
 			rqueryMap.put(qx.getQueryId(), qx);
@@ -161,7 +170,7 @@ public class LoaderApplication {
 
 
 	private void loadGrids(String projectId){
-		List<W5Grid> grids = entityManager.createQuery("select f from W5Grid f where f.projectUuid=?0 order by f.queryId", W5Grid.class).setParameter(0, projectId).getResultList();
+		List<W5Grid> grids = entityManager.createQuery("select f from W5Grid f where f.projectUuid=?0 order by f.gridId", W5Grid.class).setParameter(0, projectId).getResultList();
 		Map<Integer, W5Grid> gridMap = new HashMap(grids.size()*4/3);
 		for(W5Grid g:grids)gridMap.put(g.getGridId(), g);
 
@@ -194,17 +203,151 @@ public class LoaderApplication {
 			}
 		}
 		
-		RMap<Integer, W5Grid>  rgridMap= redissonClient.getMap(String.format("icb-project:%s:grid", projectId));
+		RMap<Integer, W5Grid>  rgridMap= redissonClient.getMap(String.format("icb-cache:%s:grid", projectId));
 		
 		for (W5Grid gx : grids) {
 			rgridMap.put(gx.getGridId(), gx);
 		}		
 	}
+	
+	private void loadConversions(String projectId){
+		List<W5Conversion> conversions = entityManager.createQuery("select f from W5Conversion f where f.projectUuid=?0 order by f.gridId", W5Conversion.class).setParameter(0, projectId).getResultList();
+		Map<Integer, W5Conversion> conversionMap = new HashMap(conversions.size()*4/3);
+		for(W5Conversion c:conversions)conversionMap.put(c.getConversionId(), c);
+
+		List<W5ConversionCol> conversionCols = entityManager.createQuery("select f from W5ConversionCol f where f.projectUuid=?0 order by f.conversionId, f.tabOrder", W5ConversionCol.class).setParameter(0, projectId).getResultList();
+		
+		W5Conversion c = null;
+		for (W5ConversionCol cc : conversionCols) {
+			if (c == null || cc.getConversionId() != c.getConversionId())
+				c = conversionMap.get(cc.getConversionId()); // tableMap.get(tf.getTableId());
+			
+			if (c != null) {
+				if (c.get_conversionColList()== null) {
+					c.set_conversionColList(new ArrayList<W5ConversionCol>());
+					c.set_conversionColMap(new HashMap());;
+				}
+				c.get_conversionColList().add(cc);
+				c.get_conversionColMap().put(cc.getConversionColId(), cc);
+			}
+		}
+		
+		RMap<Integer, W5Conversion>  rconversionMap= redissonClient.getMap(String.format("icb-cache:%s:conversion", projectId));
+		
+		for (W5Conversion cx : conversions) {
+			rconversionMap.put(cx.getConversionId(), cx);
+		}		
+	}
+	
+	private void loadForms(String projectId){
+		List<W5Form> forms = entityManager.createQuery("select f from W5Form f where f.projectUuid=?0 order by f.formId", W5Form.class).setParameter(0, projectId).getResultList();
+		Map<Integer, W5Form> formMap = new HashMap(forms.size()*4/3);
+		for(W5Form f:forms)formMap.put(f.getFormId(), f);
+
+		List<W5FormCell> formCells = entityManager.createQuery("select f from W5FormCell f where f.projectUuid=?0 order by f.formId, f.tabOrder", W5FormCell.class).setParameter(0, projectId).getResultList();
+		List<W5FormModule> formModules = entityManager.createQuery("select f from W5FormModule f where f.projectUuid=?0 order by f.formId, f.tabOrder", W5FormModule.class).setParameter(0, projectId).getResultList();
+		List<W5FormHint> formHints = entityManager.createQuery("select f from W5FormHint f where f.projectUuid=?0 order by f.formId, f.tabOrder", W5FormHint.class).setParameter(0, projectId).getResultList();
+		
+		W5Form f = null;
+		for (W5FormCell fc : formCells) {
+			if (f == null || fc.getFormId() != f.getFormId())
+				f = formMap.get(fc.getFormId()); // tableMap.get(tf.getTableId());
+			
+			if (f != null) {
+				if (f.get_formCells() == null) {
+					f.set_formCells(new ArrayList<W5FormCell>());
+				}
+				f.get_formCells().add(fc);
+			}
+		}
+		
+		f = null;
+		for (W5FormModule fm : formModules) {
+			if (f == null || fm.getFormId() != f.getFormId())
+				f = formMap.get(fm.getFormId()); // tableMap.get(tf.getTableId());
+			
+			if (f != null) {
+				if (f.get_moduleList() == null) {
+					f.set_moduleList(new ArrayList<W5FormModule>());
+				}
+				f.get_moduleList().add(fm);
+			}
+		}
+		
+		f = null;
+		for (W5FormHint fh : formHints) {
+			if (f == null || fh.getFormId() != f.getFormId())
+				f = formMap.get(fh.getFormId()); // tableMap.get(tf.getTableId());
+			
+			if (f != null) {
+				if (f.get_formHintList() == null) {
+					f.set_formHintList(new ArrayList<W5FormHint>());
+				}
+				f.get_formHintList().add(fh);
+			}
+		}
+		
+		RMap<Integer, W5Form>  rformMap= redissonClient.getMap(String.format("icb-cache:%s:form", projectId));
+		
+		for (W5Form fx : forms) {
+			rformMap.put(fx.getFormId(), fx);
+		}		
+	}
+	
+
+	private void loadCards(String projectId){
+		List<W5Card> cards = entityManager.createQuery("select f from W5Card f where f.projectUuid=?0 order by f.dataViewId", W5Card.class).setParameter(0, projectId).getResultList();
+		Map<Integer, W5Card> cardMap = new HashMap(cards.size()*4/3);
+		for(W5Card c:cards)cardMap.put(c.getDataViewId(), c);
+
+		
+		RMap<Integer, W5Card>  rcardMap= redissonClient.getMap(String.format("icb-cache:%s:card", projectId));
+		
+		for (W5Card cx : cards) {
+			rcardMap.put(cx.getDataViewId(), cx);
+		}		
+	}
+	
+
+	private void loadGlobalFuncs(String projectId){
+		List<W5GlobalFunc> funcs = entityManager.createQuery("select f from W5GlobalFunc f where f.projectUuid=?0 order by f.dbFuncId", W5GlobalFunc.class).setParameter(0, projectId).getResultList();
+		Map<Integer, W5GlobalFunc> funcMap = new HashMap(funcs.size()*4/3);
+		for(W5GlobalFunc c:funcs)funcMap.put(c.getDbFuncId(), c);
+		
+		List<W5GlobalFuncParam> funcParams = entityManager.createQuery("select f from W5GlobalFuncParam f where f.projectUuid=?0 order by f.dbFuncId, f.tabOrder", W5GlobalFuncParam.class).setParameter(0, projectId).getResultList();
+
+
+		W5GlobalFunc f = null;
+		for (W5GlobalFuncParam fp : funcParams) {
+			if (f == null || fp.getDbFuncId() != f.getDbFuncId())
+				f = funcMap.get(fp.getDbFuncId()); // tableMap.get(tf.getTableId());
+			
+			if (f != null) {
+				if (f.get_dbFuncParamList() == null) {
+					f.set_dbFuncParamList(new ArrayList<W5GlobalFuncParam>());
+				}
+				f.get_dbFuncParamList().add(fp);
+			}
+		}
+		
+		
+		RMap<Integer, W5GlobalFunc>  rfuncMap= redissonClient.getMap(String.format("icb-cache:%s:func", projectId));
+		
+		for (W5GlobalFunc cx : funcs) {
+			rfuncMap.put(cx.getDbFuncId(), cx);
+		}		
+	}
+	
+	
 	@EventListener(ApplicationReadyEvent.class)
 	public void work() {
 		loadTables(projectId);
+		loadForms(projectId);
 		loadQueries(projectId);
 		loadGrids(projectId);
+		loadCards(projectId);
+		loadGlobalFuncs(projectId);
+		loadConversions(projectId);
 		if(true)return;
 		
 		List<W5Form> forms = entityManager.createQuery("select f from W5Form f where f.projectUuid=?0", W5Form.class).setParameter(0, projectId).getResultList();
