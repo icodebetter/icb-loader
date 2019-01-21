@@ -28,6 +28,9 @@ import iwb.domain.db.W5TableChild;
 import iwb.domain.db.W5TableEvent;
 import iwb.domain.db.W5TableField;
 import iwb.domain.db.W5TableParam;
+import iwb.domain.db.W5Ws;
+import iwb.domain.db.W5WsMethod;
+import iwb.domain.db.W5WsMethodParam;
 import iwb.util.GenericUtil;
 
 import org.redisson.Redisson;
@@ -52,7 +55,7 @@ import java.util.Map;
 @SpringBootApplication
 public class LoaderApplication {
 	public static String projectId="067e6162-3b6f-4ae2-a221-2470b63dff00";
-	public static String host="35.226.30.186";
+	public static String host="localhost"; //35.226.30.186
 
 	@Bean
 	public RedissonClient redisson() {
@@ -614,6 +617,53 @@ public class LoaderApplication {
 		}		
 	}
 	
+	public void loadWsClients(String projectId) {
+		List<W5Ws> wss = entityManager.createQuery("select f from W5Ws f where f.projectUuid=?0 order by f.wsId", W5Ws.class).setParameter(0, projectId).getResultList();
+		Map<Integer, W5Ws> wsMap = new HashMap(wss.size()*4/3);
+		for(W5Ws c:wss)wsMap.put(c.getWsId(), c);
+		
+		List<W5WsMethod> wsMethods = entityManager.createQuery("select f from W5WsMethod f where f.projectUuid=?0 order by f.wsId, f.wsMethodId", W5WsMethod.class).setParameter(0, projectId).getResultList();
+		Map<Integer, W5WsMethod> wsMethodMap = new HashMap(wsMethods.size()*4/3);
+		for(W5WsMethod c:wsMethods)wsMethodMap.put(c.getWsMethodId(), c);
+
+		List<W5WsMethodParam> wsMethodParams = entityManager.createQuery("select f from W5WsMethodParam f where f.projectUuid=?0 order by f.wsMethodId, f.tabOrder", W5WsMethodParam.class).setParameter(0, projectId).getResultList();
+
+
+		W5Ws ws = null;
+		for (W5WsMethod wsm : wsMethods) {
+			if (ws == null || wsm.getWsId() != ws.getWsId())
+				ws = wsMap.get(wsm.getWsId()); // tableMap.get(tf.getTableId());
+			
+			if (ws != null) {
+				if (ws.get_methods() == null) {
+					ws.set_methods(new ArrayList<W5WsMethod>());
+				}
+				ws.get_methods().add(wsm);
+			}
+		}
+		W5WsMethod wsm = null;
+		for (W5WsMethodParam wsmp : wsMethodParams) {
+			if (wsm == null || wsm.getWsMethodId() != wsmp.getWsMethodId())
+				wsm = wsMethodMap.get(wsmp.getWsMethodId()); // tableMap.get(tf.getTableId());
+			
+			if (wsm != null) {
+				if (wsm.get_params() == null) {
+					wsm.set_params(new ArrayList<W5WsMethodParam>());
+					wsm.set_paramMap(new HashMap());
+				}
+				wsm.get_params().add(wsmp);
+				wsm.get_paramMap().put(wsmp.getWsMethodParamId(), wsmp);
+			}
+		}
+		
+		
+		RMap<Integer, W5Ws>  rwsMap= redissonClient.getMap(String.format("icb-cache2:%s:ws", projectId));
+		
+		for (W5Ws cx : wss) {
+			rwsMap.put(cx.getWsId(), cx);
+		}
+		
+	}
 	
 	@EventListener(ApplicationReadyEvent.class)
 	public void work() {
@@ -628,6 +678,7 @@ public class LoaderApplication {
 		loadPages(projectId);
 		loadComponents(projectId);
 		loadMList(projectId);
+		loadWsClients(projectId);
 		if(true)return;
 		
 	/*	List<W5Form> forms = entityManager.createQuery("select f from W5Form f where f.projectUuid=?0", W5Form.class).setParameter(0, projectId).getResultList();
