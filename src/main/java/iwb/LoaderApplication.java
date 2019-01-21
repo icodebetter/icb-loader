@@ -1,6 +1,8 @@
 package iwb;
 
+import iwb.domain.db.M5List;
 import iwb.domain.db.W5Card;
+import iwb.domain.db.W5Component;
 import iwb.domain.db.W5Conversion;
 import iwb.domain.db.W5ConversionCol;
 import iwb.domain.db.W5Form;
@@ -50,7 +52,7 @@ import java.util.Map;
 @SpringBootApplication
 public class LoaderApplication {
 	public static String projectId="067e6162-3b6f-4ae2-a221-2470b63dff00";
-	public static String host="localhost";//"35.226.30.186";
+	public static String host="35.226.30.186";
 
 	@Bean
 	public RedissonClient redisson() {
@@ -77,9 +79,9 @@ public class LoaderApplication {
 		Map<Integer, W5Table> tableMap = new HashMap(tables.size()*4/3);
 		for(W5Table t:tables)tableMap.put(t.getTableId(), t);
 		
-		List<W5TableField> tableFields = entityManager.createQuery("select f from W5TableField f where f.projectUuid=?0 order by f.tableId, f.tabOrder", W5TableField.class).setParameter(0, projectId).getResultList();
+		List<W5TableField> tableFields = entityManager.createQuery("select f from W5TableField f where f.tabOrder>0 AND f.projectUuid=?0 order by f.tableId, f.tabOrder", W5TableField.class).setParameter(0, projectId).getResultList();
 		List<W5TableParam> tableParams = entityManager.createQuery("select f from W5TableParam f where f.projectUuid=?0 order by f.tableId, f.tabOrder", W5TableParam.class).setParameter(0, projectId).getResultList();
-		List<W5TableEvent> tableEvents = entityManager.createQuery("select f from W5TableEvent f where f.projectUuid=?0 order by f.tableId, f.tabOrder", W5TableEvent.class).setParameter(0, projectId).getResultList();
+		List<W5TableEvent> tableEvents = entityManager.createQuery("select f from W5TableEvent f where f.activeFlag=1 AND f.projectUuid=?0 order by f.tableId, f.tabOrder", W5TableEvent.class).setParameter(0, projectId).getResultList();
 		List<W5TableChild> tableChilds = entityManager.createQuery("select f from W5TableChild f where f.projectUuid=?0 order by f.tableId, f.tableChildId", W5TableChild.class).setParameter(0, projectId).getResultList();
 		
 		W5Table t = null;
@@ -209,7 +211,18 @@ public class LoaderApplication {
 
 	}
 	
+	private void loadComponents(String projectId){
+		List<W5Component> components = entityManager.createQuery("select f from W5Component f where f.projectUuid=?0 order by f.componentId", W5Component.class).setParameter(0, projectId).getResultList();
 
+		
+		RMap<Integer, W5Component>  rcomponentMap= redissonClient.getMap(String.format("icb-cache2:%s:component", projectId));
+		
+		for (W5Component cx : components) {
+			rcomponentMap.put(cx.getComponentId(), cx);
+		}
+		rcomponentMap.values().iterator().next();
+
+	}
 	private void loadPages(String projectId){
 		List<W5Page> pages = entityManager.createQuery("select f from W5Page f where f.projectUuid=?0 order by f.templateId", W5Page.class).setParameter(0, projectId).getResultList();
 		Map<Integer, W5Page> pageMap = new HashMap(pages.size()*4/3);
@@ -237,26 +250,27 @@ public class LoaderApplication {
 				lp.add(to.getSrcQueryFieldId());
 				lp.add(projectId);
 				lp.add(to.getDstQueryParamId());
-				String sql = "select (select f1.dsc from iwb.w5_query_field f1 where f1.project_uuid=?0 AND f1.query_field_id=?1) f_dsc, "
-						+ "(select p1.dsc from iwb.w5_query_param p1 where p1.project_uuid=?2 AND p1.query_param_id=?3) p_dsc";
+				String sql = "select (select f1.dsc from iwb.w5_query_field f1 where f1.project_uuid=?0 AND f1.query_field_id=?1) x1, "
+						+ "(select p1.dsc from iwb.w5_query_param p1 where p1.project_uuid=?2 AND p1.query_param_id=?3) x2 ";
 				if (to.getDstStaticQueryParamId() != null && !GenericUtil.isEmpty(to.getDstStaticQueryParamVal())) {
 					lp.add(projectId);
 					lp.add(to.getDstStaticQueryParamId());
-					sql += ",(select p1.dsc from iwb.w5_query_param p1 where p1.project_uuid=?4 AND p1.query_param_id=?5) ps_dsc";
+					sql += ",(select p1.dsc from iwb.w5_query_param p1 where p1.project_uuid=?4 AND p1.query_param_id=?5) x3";
 				}
+				sql +=" from iwb.w5_table limit 1";
 				
-				Query q = entityManager.createQuery(sql);
+				Query q = entityManager.createNativeQuery(sql);
 				int position = 0;
 				for(Object pm:lp)q.setParameter(position++, pm);
 				List l = q.getResultList();
 				
 //				List l = executeSQLQuery2Map(sql, lp);
 				if (!GenericUtil.isEmpty(l)) {
-					Map m = (Map) l.get(0);
-					to.set_srcQueryFieldName((String) m.get("f_dsc"));
-					to.set_dstQueryParamName((String) m.get("p_dsc"));
-					if (m.containsKey("ps_dsc"))
-						to.set_dstStaticQueryParamName((String) m.get("ps_dsc"));
+					Object[] m = (Object[]) l.get(0);
+					to.set_srcQueryFieldName((String) m[0]);
+					to.set_dstQueryParamName((String) m[1]);
+					if (m.length>2)
+						to.set_dstStaticQueryParamName((String) m[2]);
 				}
 			}
 		
@@ -279,6 +293,7 @@ public class LoaderApplication {
 		List<W5GridModule> gridModules = entityManager.createQuery("select f from W5GridModule f where f.projectUuid=?0 order by f.gridId, f.tabOrder", W5GridModule.class).setParameter(0, projectId).getResultList();
 		List<W5ObjectToolbarItem> gridToolbarItems = entityManager.createQuery("select f from W5ObjectToolbarItem f where f.objectTip=5 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectToolbarItem.class).setParameter(0, projectId).getResultList();
 		List<W5ObjectMenuItem> gridMenuItems = entityManager.createQuery("select f from W5ObjectMenuItem f where f.objectTip=5 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectMenuItem.class).setParameter(0, projectId).getResultList();
+		List<Object[]> gridSearchFormsIds = entityManager.createQuery("select f.formId, f.objectId from W5Form f where f.objectTip=1 AND f.projectUuid=?0 order by f.formId, f.tabOrder", Object[].class).setParameter(0, projectId).getResultList();
 
 		W5Grid g = null;
 		for (W5GridColumn gc : gridColumns) {
@@ -332,12 +347,87 @@ public class LoaderApplication {
 			}
 		}
 		
+		g = null;
+		for (Object[] gsfi : gridSearchFormsIds) {
+			int gridId = Integer.parseInt(gsfi[1].toString()); 
+			if (g == null || gridId != g.getGridId())
+				g = gridMap.get(gridId); // tableMap.get(tf.getTableId());
+			
+			if (g != null) {
+				g.set_searchFormId(Integer.parseInt(gsfi[1].toString()));
+			}
+		}
+		
 		RMap<Integer, W5Grid>  rgridMap= redissonClient.getMap(String.format("icb-cache2:%s:grid", projectId));
 		
 		for (W5Grid gx : grids) {
 			rgridMap.put(gx.getGridId(), gx);
 		}		
 		rgridMap.values().iterator().next();
+
+	}
+	
+	private void loadMList(String projectId){
+		List<M5List> mlists = entityManager.createQuery("select f from M5List f where f.projectUuid=?0 order by f.listId", M5List.class).setParameter(0, projectId).getResultList();
+		Map<Integer, M5List> mlistMap = new HashMap(mlists.size()*4/3);
+		for(M5List ml:mlists)mlistMap.put(ml.getListId(), ml);
+
+		List<W5ObjectToolbarItem> gridToolbarItems = entityManager.createQuery("select f from W5ObjectToolbarItem f where f.objectTip=1345 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectToolbarItem.class).setParameter(0, projectId).getResultList();
+		List<W5ObjectMenuItem> gridMenuItems = entityManager.createQuery("select f from W5ObjectMenuItem f where f.objectTip=1345 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectMenuItem.class).setParameter(0, projectId).getResultList();
+		List<Object[]> gridSearchFormsIds = entityManager.createQuery("select f.formId, f.objectId from W5Form f where f.objectTip=10 AND f.projectUuid=?0 order by f.formId, f.tabOrder", Object[].class).setParameter(0, projectId).getResultList();
+
+		M5List ml = null;
+		for (W5ObjectToolbarItem gt : gridToolbarItems) {
+			if (ml == null || gt.getObjectId() != ml.getListId())
+				ml = mlistMap.get(gt.getObjectId()); // tableMap.get(tf.getTableId());
+			
+			if (ml != null) {
+				if (ml.get_toolbarItemList() == null) {
+					ml.set_toolbarItemList(new ArrayList<W5ObjectToolbarItem>());
+				}
+				ml.get_toolbarItemList().add(gt);
+			}
+		}
+		
+		ml = null;
+		for (W5ObjectMenuItem gm : gridMenuItems) {
+			if (ml == null || gm.getObjectId() != ml.getListId())
+				ml = mlistMap.get(gm.getObjectId()); // tableMap.get(tf.getTableId());
+			
+			if (ml != null) {
+				if (ml.get_menuItemList() == null) {
+					ml.set_menuItemList(new ArrayList<W5ObjectMenuItem>());
+				}
+				ml.get_menuItemList().add(gm);
+			}
+		}
+		
+		ml = null;
+		for (Object[] gsfi : gridSearchFormsIds) {
+			int gridId = Integer.parseInt(gsfi[1].toString()); 
+			if (ml == null || gridId != ml.getListId())
+				ml = mlistMap.get(gridId); // tableMap.get(tf.getTableId());
+			
+			if (ml != null) {
+				ml.set_searchFormId(Integer.parseInt(gsfi[1].toString()));
+			}
+		}
+		
+		for (M5List gx : mlists) if(gx.getParentListId()!=0){
+			M5List pml = mlistMap.get(gx.getParentListId());
+			if(pml!=null){
+				if(pml.get_detailMLists()==null)
+					pml.set_detailMLists(new ArrayList());
+				pml.get_detailMLists().add(gx);
+			}			
+		}
+		
+		RMap<Integer, M5List>  rmlistMap= redissonClient.getMap(String.format("icb-cache2:%s:mlist", projectId));
+		
+		for (M5List gx : mlists) {
+			rmlistMap.put(gx.getListId(), gx);
+		}		
+		rmlistMap.values().iterator().next();
 
 	}
 	
@@ -446,6 +536,7 @@ public class LoaderApplication {
 		for(W5Card c:cards)cardMap.put(c.getDataViewId(), c);
 		List<W5ObjectToolbarItem> cardToolbarItems = entityManager.createQuery("select f from W5ObjectToolbarItem f where f.objectTip=8 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectToolbarItem.class).setParameter(0, projectId).getResultList();
 		List<W5ObjectMenuItem> cardMenuItems = entityManager.createQuery("select f from W5ObjectMenuItem f where f.objectTip=8 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectMenuItem.class).setParameter(0, projectId).getResultList();
+		List<Object[]> cardSearchFormsIds = entityManager.createQuery("select f.formId, f.objectId from W5Form f where f.objectTip=8 AND f.projectUuid=?0 order by f.formId, f.tabOrder", Object[].class).setParameter(0, projectId).getResultList();
 
 		W5Card c = null;
 		for (W5ObjectToolbarItem gt : cardToolbarItems) {
@@ -472,6 +563,19 @@ public class LoaderApplication {
 				c.get_menuItemList().add(gm);
 			}
 		}
+		
+		
+		c = null;
+		for (Object[] csfi : cardSearchFormsIds) {
+			int cardId = Integer.parseInt(csfi[1].toString()); 
+			if (c == null || cardId != c.getDataViewId())
+				c = cardMap.get(cardId); // tableMap.get(tf.getTableId());
+			
+			if (c != null) {
+				c.set_searchFormId(Integer.parseInt(csfi[0].toString()));
+			}
+		}
+
 		
 		RMap<Integer, W5Card>  rcardMap= redissonClient.getMap(String.format("icb-cache2:%s:card", projectId));
 		
@@ -522,6 +626,8 @@ public class LoaderApplication {
 		loadGlobalFuncs(projectId);
 		loadConversions(projectId);
 		loadPages(projectId);
+		loadComponents(projectId);
+		loadMList(projectId);
 		if(true)return;
 		
 	/*	List<W5Form> forms = entityManager.createQuery("select f from W5Form f where f.projectUuid=?0", W5Form.class).setParameter(0, projectId).getResultList();
