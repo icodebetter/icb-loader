@@ -2,9 +2,9 @@ spring:
   jpa:
     properties:
       hibernate:
-        show_sql: true
+        show_sql: false
         use_sql_comments: true
-        format_sql: true
+        format_sql: false
         type: trace
         jdbc:
           lob:
