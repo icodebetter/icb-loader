@@ -296,7 +296,7 @@ public class LoaderApplication {
 		List<W5GridModule> gridModules = entityManager.createQuery("select f from W5GridModule f where f.projectUuid=?0 order by f.gridId, f.tabOrder", W5GridModule.class).setParameter(0, projectId).getResultList();
 		List<W5ObjectToolbarItem> gridToolbarItems = entityManager.createQuery("select f from W5ObjectToolbarItem f where f.objectTip=5 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectToolbarItem.class).setParameter(0, projectId).getResultList();
 		List<W5ObjectMenuItem> gridMenuItems = entityManager.createQuery("select f from W5ObjectMenuItem f where f.objectTip=5 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectMenuItem.class).setParameter(0, projectId).getResultList();
-		List<Object[]> gridSearchFormsIds = entityManager.createQuery("select f.formId, f.objectId from W5Form f where f.objectTip=1 AND f.projectUuid=?0 order by f.formId, f.tabOrder", Object[].class).setParameter(0, projectId).getResultList();
+		List<Object[]> gridSearchFormIds = entityManager.createQuery("select f.formId, f.objectId from W5Form f where f.objectTip=1 AND f.projectUuid=?0 order by f.formId, f.tabOrder", Object[].class).setParameter(0, projectId).getResultList();
 
 		W5Grid g = null;
 		for (W5GridColumn gc : gridColumns) {
@@ -350,14 +350,12 @@ public class LoaderApplication {
 			}
 		}
 		
-		g = null;
-		for (Object[] gsfi : gridSearchFormsIds) {
-			int gridId = Integer.parseInt(gsfi[1].toString()); 
-			if (g == null || gridId != g.getGridId())
-				g = gridMap.get(gridId); // tableMap.get(tf.getTableId());
+		for (Object[] gsfi : gridSearchFormIds) {
+			int gridId = (Integer)gsfi[1]; 
+			g = gridMap.get(gridId); // tableMap.get(tf.getTableId());
 			
 			if (g != null) {
-				g.set_searchFormId(Integer.parseInt(gsfi[1].toString()));
+				g.set_searchFormId((Integer)gsfi[0]);
 			}
 		}
 		
@@ -377,7 +375,7 @@ public class LoaderApplication {
 
 		List<W5ObjectToolbarItem> gridToolbarItems = entityManager.createQuery("select f from W5ObjectToolbarItem f where f.objectTip=1345 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectToolbarItem.class).setParameter(0, projectId).getResultList();
 		List<W5ObjectMenuItem> gridMenuItems = entityManager.createQuery("select f from W5ObjectMenuItem f where f.objectTip=1345 AND f.projectUuid=?0 order by f.objectId, f.tabOrder", W5ObjectMenuItem.class).setParameter(0, projectId).getResultList();
-		List<Object[]> gridSearchFormsIds = entityManager.createQuery("select f.formId, f.objectId from W5Form f where f.objectTip=10 AND f.projectUuid=?0 order by f.formId, f.tabOrder", Object[].class).setParameter(0, projectId).getResultList();
+		List<Object[]> mlistSearchFormIds = entityManager.createQuery("select f.formId, f.objectId from W5Form f where f.objectTip=10 AND f.projectUuid=?0 order by f.formId, f.tabOrder", Object[].class).setParameter(0, projectId).getResultList();
 
 		M5List ml = null;
 		for (W5ObjectToolbarItem gt : gridToolbarItems) {
@@ -406,13 +404,12 @@ public class LoaderApplication {
 		}
 		
 		ml = null;
-		for (Object[] gsfi : gridSearchFormsIds) {
-			int gridId = Integer.parseInt(gsfi[1].toString()); 
-			if (ml == null || gridId != ml.getListId())
-				ml = mlistMap.get(gridId); // tableMap.get(tf.getTableId());
+		for (Object[] gsfi : mlistSearchFormIds) {
+			int gridId = (Integer)gsfi[1]; 
+			ml = mlistMap.get(gridId); // tableMap.get(tf.getTableId());
 			
 			if (ml != null) {
-				ml.set_searchFormId(Integer.parseInt(gsfi[1].toString()));
+				ml.set_searchFormId((Integer)gsfi[0]);
 			}
 		}
 		
@@ -570,12 +567,11 @@ public class LoaderApplication {
 		
 		c = null;
 		for (Object[] csfi : cardSearchFormsIds) {
-			int cardId = Integer.parseInt(csfi[1].toString()); 
-			if (c == null || cardId != c.getDataViewId())
-				c = cardMap.get(cardId); // tableMap.get(tf.getTableId());
+			int cardId = (Integer)csfi[1]; 
+			c = cardMap.get(cardId); // tableMap.get(tf.getTableId());
 			
 			if (c != null) {
-				c.set_searchFormId(Integer.parseInt(csfi[0].toString()));
+				c.set_searchFormId((Integer)csfi[0]);
 			}
 		}
 
