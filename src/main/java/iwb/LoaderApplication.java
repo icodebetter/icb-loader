@@ -768,7 +768,7 @@ public class LoaderApplication {
 		if(xtype){
 			Map<String, Object> r = new HashMap();
 			for(Integer key:cardMap.keySet())
-				r.put(projectId+":conversion:"+key, cardMap.get(key));
+				r.put(projectId+":card:"+key, cardMap.get(key));
 			return r;
 		}
 		
