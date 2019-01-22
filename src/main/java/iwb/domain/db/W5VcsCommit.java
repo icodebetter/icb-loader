@@ -5,12 +5,13 @@ import javax.persistence.Entity;
 import javax.persistence.Id;
 import javax.persistence.Table;
 
-import org.json.JSONException;
-import org.json.JSONObject;
+import org.hibernate.annotations.Immutable;
+
 
 import iwb.util.GenericUtil;
 
 @Entity
+@Immutable
 @Table(name="w5_vcs_commit", schema="iwb")
 public class W5VcsCommit  implements java.io.Serializable {
 
@@ -25,26 +26,7 @@ public class W5VcsCommit  implements java.io.Serializable {
 	
 
 	
-	
-	public W5VcsCommit(JSONObject o) {
-		if(o==null)return;
-		try {
-			if(o.has("vcs_commit_id"))vcsCommitId=o.getInt("vcs_commit_id");
-			if(o.has("project_uuid")){
-				projectUuid=o.getString("project_uuid");
-			}
-			if(o.has("oproject_uuid")){
-				oprojectUuid=o.getString("oproject_uuid");
-			} else {
-				oprojectUuid=projectUuid;
-			}
-			if(o.has("extra_sql"))extraSql=o.getString("extra_sql");
-			if(o.has("comment"))comment=o.getString("comment");
-			if(o.has("commit_tip"))commitTip=(short)o.getInt("commit_tip");
-			if(o.has("run_local_flag"))runLocalFlag=(short)o.getInt("run_local_flag");
-		} catch (JSONException e) {e.printStackTrace();}
-	}
-	
+
 	public W5VcsCommit() {
 	}
 
