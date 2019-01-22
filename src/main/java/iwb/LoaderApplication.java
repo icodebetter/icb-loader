@@ -30,12 +30,17 @@ import iwb.domain.db.W5TableChild;
 import iwb.domain.db.W5TableEvent;
 import iwb.domain.db.W5TableField;
 import iwb.domain.db.W5TableParam;
+import iwb.domain.db.W5VcsCommit;
 import iwb.domain.db.W5Ws;
 import iwb.domain.db.W5WsMethod;
 import iwb.domain.db.W5WsMethodParam;
+import iwb.domain.db.W5WsServer;
+import iwb.domain.db.W5WsServerMethod;
+import iwb.domain.db.W5WsServerMethodParam;
 import iwb.util.GenericUtil;
 
 import org.redisson.Redisson;
+import org.redisson.api.RList;
 import org.redisson.api.RMap;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
@@ -58,7 +63,7 @@ import java.util.Map;
 public class LoaderApplication {
 	public static String projectId = "6a38cf0c-2389-43d6-9e74-7d41746b1f8f"; // 22dbc523-80a9-4441-946f-7ccf8283c4cf
 																				// //067e6162-3b6f-4ae2-a221-2470b63dff00
-	public static String host = "35.226.30.186"; // 35.226.30.186
+	public static String host = "localhost"; // 35.226.30.186
 	
 	public static boolean xtype = true;
 
@@ -319,6 +324,26 @@ public class LoaderApplication {
 
 	}
 
+
+	private Map<String, Object>  loadDBSqls(String projectId) {
+		List<W5VcsCommit> commits = entityManager
+				.createQuery("select f from W5VcsCommit f where f.vcsCommitId>0 AND f.commitTip=2 AND f.projectUuid=?0 order by f.vcsCommitId",
+						W5VcsCommit.class)
+				.setParameter(0, projectId).getResultList();
+
+		if(xtype){
+			Map<String, Object> r = new HashMap();
+			r.put("sql", commits);
+			return r;
+		}
+		RList<W5VcsCommit> rcomponentList = redissonClient
+				.getList(String.format("icb-cache2:%s:sql", projectId));
+		
+		rcomponentList.addAll(commits);
+		return null;
+
+	}
+	
 	private Map<String, Object>  loadPages(String projectId) {
 		List<W5Page> pages = entityManager
 				.createQuery("select f from W5Page f where f.projectUuid=?0 order by f.templateId", W5Page.class)
@@ -904,6 +929,67 @@ public class LoaderApplication {
 
 	}
 
+	private Map<String, Object>  loadWsServers(String projectId) {
+		List<W5WsServer> wsss = entityManager
+				.createQuery("select f from W5WsServer f where f.projectUuid=?0 order by f.wsServerId", W5WsServer.class)
+				.setParameter(0, projectId).getResultList();
+		Map<Integer, W5WsServer> wssMap = new HashMap(wsss.size() * 4 / 3);
+		for (W5WsServer c : wsss)
+			wssMap.put(c.getWsServerId(), c);
+
+		List<W5WsServerMethod> wssMethods = entityManager
+				.createQuery("select f from W5WsServerMethod f where f.projectUuid=?0 order by f.wsServerId, f.wsServerMethodId",
+						W5WsServerMethod.class)
+				.setParameter(0, projectId).getResultList();
+		Map<Integer, W5WsServerMethod> wssMethodMap = new HashMap(wssMethods.size() * 4 / 3);
+		for (W5WsServerMethod c : wssMethods)
+			wssMethodMap.put(c.getWsServerMethodId(), c);
+
+		List<W5WsServerMethodParam> wssMethodParams = entityManager
+				.createQuery("select f from W5WsServerMethodParam f where f.projectUuid=?0 order by f.wsServerMethodId, f.tabOrder",
+						W5WsServerMethodParam.class)
+				.setParameter(0, projectId).getResultList();
+
+		W5WsServer wss = null;
+		for (W5WsServerMethod wssm : wssMethods) {
+			if (wss == null || wssm.getWsServerId() != wss.getWsServerId())
+				wss = wssMap.get(wssm.getWsServerId()); // tableMap.get(tf.getTableId());
+
+			if (wss != null) {
+				if (wss.get_methods() == null) {
+					wss.set_methods(new ArrayList<W5WsServerMethod>());
+				}
+				wss.get_methods().add(wssm);
+			}
+		}
+		W5WsServerMethod wssm = null;
+		for (W5WsServerMethodParam wsmp : wssMethodParams) {
+			if (wssm == null || wssm.getWsServerMethodId() != wsmp.getWsServerMethodId())
+				wssm = wssMethodMap.get(wsmp.getWsServerMethodId()); // tableMap.get(tf.getTableId());
+
+			if (wssm != null) {
+				if (wssm.get_params() == null) {
+					wssm.set_params(new ArrayList<W5WsServerMethodParam>());
+				}
+				wssm.get_params().add(wsmp);
+			}
+		}
+
+		if(xtype){
+			Map<String, Object> r = new HashMap();
+			r.put("wss", wssMap);
+			return r;
+		}
+		
+		RMap<Integer, W5WsServer> rwsMap = redissonClient.getMap(String.format("icb-cache2:%s:wss", projectId));
+
+		for (W5WsServer cx : wsss) {
+			rwsMap.put(cx.getWsServerId(), cx);
+		}
+		return null;
+
+	}
+
 	@EventListener(ApplicationReadyEvent.class)
 	public void work() {
 		System.out.println("Start Loading");
@@ -921,7 +1007,9 @@ public class LoaderApplication {
 				m = loadTables(p.getProjectUuid());if(xtype)nodeMap.putAll(m);
 				m = loadComponents(p.getProjectUuid());if(xtype)nodeMap.putAll(m);
 				m = loadWsClients(p.getProjectUuid());if(xtype)nodeMap.putAll(m);
+				m = loadWsServers(p.getProjectUuid());if(xtype)nodeMap.putAll(m);
 				m = loadConversions(p.getProjectUuid());if(xtype)nodeMap.putAll(m);
+				m = loadDBSqls(p.getProjectUuid());if(xtype)nodeMap.putAll(m);				
 				if(xtype)projectMap.put(p.getProjectUuid(), nodeMap);
 
 				Map<String, Object> objMap = new HashMap();
