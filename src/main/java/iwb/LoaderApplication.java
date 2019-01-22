@@ -9,6 +9,7 @@ import iwb.domain.db.W5Form;
 import iwb.domain.db.W5FormCell;
 import iwb.domain.db.W5FormHint;
 import iwb.domain.db.W5FormModule;
+import iwb.domain.db.W5FormSmsMail;
 import iwb.domain.db.W5GlobalFunc;
 import iwb.domain.db.W5GlobalFuncParam;
 import iwb.domain.db.W5Grid;
@@ -57,7 +58,7 @@ import java.util.Map;
 public class LoaderApplication {
 	public static String projectId = "6a38cf0c-2389-43d6-9e74-7d41746b1f8f"; // 22dbc523-80a9-4441-946f-7ccf8283c4cf
 																				// //067e6162-3b6f-4ae2-a221-2470b63dff00
-	public static String host = "localhost"; // 35.226.30.186
+	public static String host = "35.226.30.186"; // 35.226.30.186
 	
 	public static boolean xtype = true;
 
@@ -607,8 +608,7 @@ public class LoaderApplication {
 
 		if(xtype){
 			Map<String, Object> r = new HashMap();
-			for(Integer key:conversionMap.keySet())
-				r.put(projectId+":conversion:"+key, conversionMap.get(key));
+			r.put("conversion", conversionMap);
 			return r;
 		}
 		
@@ -644,6 +644,10 @@ public class LoaderApplication {
 		List<W5ObjectToolbarItem> formToolbarItems = entityManager.createQuery(
 				"select f from W5ObjectToolbarItem f where f.objectTip=15 AND f.projectUuid=?0 order by f.objectId, f.tabOrder",
 				W5ObjectToolbarItem.class).setParameter(0, projectId).getResultList();
+		List<W5FormSmsMail> formSmsMails = entityManager.createQuery(
+				"select f from W5FormSmsMail f where f.activeFlag=1 AND f.projectUuid=?0 order by f.formId, f.smsMailSentTip, f.tabOrder",
+				W5FormSmsMail.class).setParameter(0, projectId).getResultList();
+		
 
 		W5Form f = null;
 		for (W5FormCell fc : formCells) {
@@ -694,6 +698,19 @@ public class LoaderApplication {
 					f.set_toolbarItemList(new ArrayList<W5ObjectToolbarItem>());
 				}
 				f.get_toolbarItemList().add(ft);
+			}
+		}
+		
+		f = null;
+		for (W5FormSmsMail ft : formSmsMails) {
+			if (f == null || ft.getFormId() != f.getFormId())
+				f = formMap.get(ft.getFormId()); // tableMap.get(tf.getTableId());
+
+			if (f != null) {
+				if (f.get_formSmsMailList() == null) {
+					f.set_formSmsMailList(new ArrayList<W5FormSmsMail>());
+				}
+				f.get_formSmsMailList().add(ft);
 			}
 		}
 		if(xtype){
@@ -904,6 +921,7 @@ public class LoaderApplication {
 				m = loadTables(p.getProjectUuid());if(xtype)nodeMap.putAll(m);
 				m = loadComponents(p.getProjectUuid());if(xtype)nodeMap.putAll(m);
 				m = loadWsClients(p.getProjectUuid());if(xtype)nodeMap.putAll(m);
+				m = loadConversions(p.getProjectUuid());if(xtype)nodeMap.putAll(m);
 				if(xtype)projectMap.put(p.getProjectUuid(), nodeMap);
 
 				Map<String, Object> objMap = new HashMap();
@@ -912,7 +930,6 @@ public class LoaderApplication {
 				m = loadGrids(p.getProjectUuid());if(xtype)objMap.putAll(m);
 				m = loadCards(p.getProjectUuid());if(xtype)objMap.putAll(m);
 				m = loadGlobalFuncs(p.getProjectUuid());if(xtype)objMap.putAll(m);
-				m = loadConversions(p.getProjectUuid());if(xtype)objMap.putAll(m);
 				m = loadPages(p.getProjectUuid());if(xtype)objMap.putAll(m);
 				m = loadMList(p.getProjectUuid());if(xtype)objMap.putAll(m);
 				if(xtype)projectMap.putAll(objMap);
